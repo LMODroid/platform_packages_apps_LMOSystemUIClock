@@ -17,6 +17,7 @@ android_app {
         "SystemUIPluginLib",
     ],
     static_libs: [
+        "SystemUIClocks-CommonLib",
         "SystemUISharedLib",
     ],
     certificate: "platform",

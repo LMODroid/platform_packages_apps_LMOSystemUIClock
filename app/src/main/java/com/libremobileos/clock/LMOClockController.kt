@@ -10,29 +10,33 @@ import android.content.res.Resources
 import android.graphics.Color
 import android.graphics.Rect
 import android.icu.text.NumberFormat
+import android.icu.util.TimeZone
 import android.util.TypedValue
 import android.view.LayoutInflater
 import androidx.annotation.VisibleForTesting
+import com.android.systemui.customization.clocks.DefaultClockFaceLayout
 import com.android.systemui.log.core.MessageBuffer
-import com.android.systemui.plugins.clocks.AlarmData
-import com.android.systemui.plugins.clocks.ClockAnimations
-import com.android.systemui.plugins.clocks.ClockAxisStyle
-import com.android.systemui.plugins.clocks.ClockConfig
-import com.android.systemui.plugins.clocks.ClockController
-import com.android.systemui.plugins.clocks.ClockEventListener
-import com.android.systemui.plugins.clocks.ClockEvents
-import com.android.systemui.plugins.clocks.ClockFaceConfig
-import com.android.systemui.plugins.clocks.ClockFaceController
-import com.android.systemui.plugins.clocks.ClockFaceEvents
-import com.android.systemui.plugins.clocks.ClockMessageBuffers
-import com.android.systemui.plugins.clocks.ClockSettings
-import com.android.systemui.plugins.clocks.DefaultClockFaceLayout
-import com.android.systemui.plugins.clocks.ThemeConfig
-import com.android.systemui.plugins.clocks.WeatherData
-import com.android.systemui.plugins.clocks.ZenData
+import com.android.systemui.plugins.keyguard.data.model.AlarmData
+import com.android.systemui.plugins.keyguard.data.model.WeatherData
+import com.android.systemui.plugins.keyguard.data.model.ZenData
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockAnimations
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockAxisStyle
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockConfig
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockController
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockEventListeners
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockEvents
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockFaceConfig
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockFaceController
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockFaceEvents
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockMessageBuffers
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockPositionAnimationArgs
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockSettings
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
+import com.android.systemui.plugins.keyguard.ui.clocks.ThemeConfig
+import com.android.systemui.plugins.keyguard.ui.clocks.TimeFormatKind
+import com.android.systemui.shared.Flags.ambientAod
 import java.io.PrintWriter
 import java.util.Locale
-import java.util.TimeZone
 
 /**
  * Controls the default clock visuals.
@@ -46,7 +50,6 @@ class LMOClockController(
     private val sysuiCtx: Context,
     private val layoutInflater: LayoutInflater,
     private val resources: Resources,
-    private val sysuiResources: Resources,
     private val settings: ClockSettings?,
     messageBuffers: ClockMessageBuffers? = null,
 ) : ClockController {
@@ -95,12 +98,9 @@ class LMOClockController(
         events.onLocaleChanged(Locale.getDefault())
     }
 
-    override fun initialize(
-        isDarkTheme: Boolean,
-        dozeFraction: Float,
-        foldFraction: Float,
-        clockListener: ClockEventListener?,
-    ) {
+    override val eventListeners = ClockEventListeners()
+
+    override fun initialize(isDarkTheme: Boolean, dozeFraction: Float, foldFraction: Float) {
         largeClock.recomputePadding(null)
 
         largeClock.animations = LargeClockAnimations(largeClock.view, dozeFraction, foldFraction)
@@ -125,17 +125,14 @@ class LMOClockController(
 
         override val config = ClockFaceConfig()
         override var theme = ThemeConfig(true, seedColor)
-        override val layout =
-            DefaultClockFaceLayout(view).apply {
-                views[0].id =
-                    sysuiResources.getIdentifier("lockscreen_clock_view", "id", sysuiCtx.packageName)
-            }
+        override val layout = DefaultClockFaceLayout(view)
 
         override var animations: DefaultClockAnimations = DefaultClockAnimations(view, 0f, 0f)
             internal set
 
         init {
-            view.setColors(DOZE_COLOR, currentColor)
+            view.id = ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL
+            view.setColors(getAodColor(), currentColor)
             messageBuffer?.let { view.messageBuffer = it }
         }
 
@@ -152,7 +149,8 @@ class LMOClockController(
                     }
 
                     currentColor = color
-                    view.setColors(DOZE_COLOR, color)
+
+                    view.setColors(getAodColor(), color)
                     if (!animations.dozeState.isActive) {
                         view.animateColorChange()
                     }
@@ -172,6 +170,14 @@ class LMOClockController(
             }
 
         open fun recomputePadding(targetRegion: Rect?) {}
+
+        private fun getAodColor(): Int {
+            return if (ambientAod()) {
+                ctx.resources.getColor(android.R.color.system_accent1_100)
+            } else {
+                DOZE_COLOR
+            }
+        }
     }
 
     inner class LargeClockFaceController(
@@ -179,14 +185,11 @@ class LMOClockController(
         seedColor: Int?,
         messageBuffer: MessageBuffer?,
     ) : DefaultClockFaceController(view, seedColor, messageBuffer) {
-        override val layout =
-            DefaultClockFaceLayout(view).apply {
-                views[0].id =
-                    sysuiResources.getIdentifier("lockscreen_clock_view_large", "id", sysuiCtx.packageName)
-            }
+        override val layout = DefaultClockFaceLayout(view)
         override val config = ClockFaceConfig(hasCustomPositionUpdatedAnimation = true)
 
         init {
+            view.id = ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE
             view.hasCustomPositionUpdatedAnimation = true
             animations = LargeClockAnimations(view, 0f, 0f)
         }
@@ -194,23 +197,21 @@ class LMOClockController(
         override fun recomputePadding(targetRegion: Rect?) {}
 
         /** See documentation at [AnimatableClockView.offsetGlyphsForStepClockAnimation]. */
-        fun offsetGlyphsForStepClockAnimation(fromLeft: Int, direction: Int, fraction: Float) {
-            view.offsetGlyphsForStepClockAnimation(fromLeft, direction, fraction)
-        }
-
-        fun offsetGlyphsForStepClockAnimation(distance: Float, fraction: Float) {
-            view.offsetGlyphsForStepClockAnimation(distance, fraction)
+        fun offsetGlyphsForStepClockAnimation(args: ClockPositionAnimationArgs) {
+            view.offsetGlyphsForStepClockAnimation(args.fromLeft, args.direction, args.fraction)
         }
     }
 
     inner class DefaultClockEvents : ClockEvents {
         override var isReactiveTouchInteractionEnabled: Boolean = false
 
-        override fun onTimeFormatChanged(is24Hr: Boolean) =
-            clocks.forEach { it.refreshFormat(is24Hr) }
+        override fun onTimeFormatChanged(formatKind: TimeFormatKind) =
+            clocks.forEach { it.refreshFormat(formatKind == TimeFormatKind.FULL_DAY) }
 
-        override fun onTimeZoneChanged(timeZone: TimeZone) =
-            clocks.forEach { it.onTimeZoneChanged(timeZone) }
+        override fun onTimeZoneChanged(timeZone: TimeZone) {
+            val legacyTimezone = java.util.TimeZone.getTimeZone(timeZone.getID())
+            clocks.forEach { it.onTimeZoneChanged(legacyTimezone) }
+        }
 
         override fun onLocaleChanged(locale: Locale) {
             val nf = NumberFormat.getInstance(locale)
@@ -275,9 +276,7 @@ class LMOClockController(
             view.translationY = 0.5f * view.bottom * (1 - swipingFraction)
         }
 
-        override fun onPositionUpdated(fromLeft: Int, direction: Int, fraction: Float) {}
-
-        override fun onPositionUpdated(distance: Float, fraction: Float) {}
+        override fun onPositionAnimated(args: ClockPositionAnimationArgs) {}
 
         override fun onFidgetTap(x: Float, y: Float) {}
 
@@ -289,12 +288,8 @@ class LMOClockController(
         dozeFraction: Float,
         foldFraction: Float,
     ) : DefaultClockAnimations(view, dozeFraction, foldFraction) {
-        override fun onPositionUpdated(fromLeft: Int, direction: Int, fraction: Float) {
-            largeClock.offsetGlyphsForStepClockAnimation(fromLeft, direction, fraction)
-        }
-
-        override fun onPositionUpdated(distance: Float, fraction: Float) {
-            largeClock.offsetGlyphsForStepClockAnimation(distance, fraction)
+        override fun onPositionAnimated(args: ClockPositionAnimationArgs) {
+            largeClock.offsetGlyphsForStepClockAnimation(args)
         }
     }
 

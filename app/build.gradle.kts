@@ -65,6 +65,7 @@ dependencies {
     compileOnly(files("../system_libs/SystemUI-statsd.jar"))
     compileOnly(files("../system_libs/SystemUIPluginLib.jar"))
     implementation(files("../system_libs/PlatformAnimationLib.jar"))
+    implementation(files("../system_libs/SystemUIClocks-CommonLib.aar"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

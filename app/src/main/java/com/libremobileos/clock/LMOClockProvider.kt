@@ -10,12 +10,12 @@ import android.content.Context
 import android.view.LayoutInflater
 import androidx.core.content.res.ResourcesCompat
 import com.android.systemui.plugins.annotations.Requires
-import com.android.systemui.plugins.clocks.ClockController
-import com.android.systemui.plugins.clocks.ClockMessageBuffers
-import com.android.systemui.plugins.clocks.ClockMetadata
-import com.android.systemui.plugins.clocks.ClockPickerConfig
-import com.android.systemui.plugins.clocks.ClockProviderPlugin
-import com.android.systemui.plugins.clocks.ClockSettings
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockController
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockMessageBuffers
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockMetadata
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockPickerConfig
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockProviderPlugin
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockSettings
 
 private val TAG = LMOClockProvider::class.simpleName
 
@@ -49,11 +49,9 @@ class LMOClockProvider : ClockProviderPlugin {
     private var messageBuffers: ClockMessageBuffers? = null
 
     private lateinit var pluginContext: Context
-    private lateinit var sysuiContext: Context
 
     override fun onCreate(sysuiCtx: Context, pluginCtx: Context) {
         pluginContext = pluginCtx
-        sysuiContext = sysuiCtx
     }
 
     override fun initialize(buffers: ClockMessageBuffers?) {
@@ -62,7 +60,7 @@ class LMOClockProvider : ClockProviderPlugin {
 
     override fun getClocks(): List<ClockMetadata> = LMO_CLOCKS.map { ClockMetadata(it) }
 
-    override fun createClock(settings: ClockSettings): ClockController {
+    override fun createClock(ctx: Context, settings: ClockSettings): ClockController {
         if (!LMO_CLOCKS.contains(settings.clockId)) {
             throw IllegalArgumentException("${settings.clockId} is unsupported by $TAG")
         }
@@ -70,10 +68,9 @@ class LMOClockProvider : ClockProviderPlugin {
         return LMOClockController(
             settings.clockId!!,
             pluginContext,
-            sysuiContext,
+            ctx,
             LayoutInflater.from(pluginContext),
             pluginContext.resources,
-            sysuiContext.resources,
             settings,
             messageBuffers,
         )
